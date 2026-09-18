@@ -394,6 +394,8 @@ services:
     hostname: sqoop
     profiles: [data-ingestion]
     command: ["tail", "-f", "/dev/null"]
+    healthcheck:
+      disable: true
     env_file:
       - ./base/hadoop/hadoop-hive.env
     depends_on:
