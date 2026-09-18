@@ -10,6 +10,11 @@ services:
       - "2181:2181"
     volumes:
       - ./base/zookeeper:/opt/zookeeper-3.4.6/data
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 2181"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
     deploy:
       resources:
         limits:
@@ -49,7 +54,8 @@ services:
     environment:
       SERVICE_PRECONDITION: "namenode:50070"
     depends_on:
-      - namenode
+      namenode:
+        condition: service_healthy
     ports:
       - "50075:50075"
     deploy:
@@ -71,7 +77,8 @@ services:
     environment:
       SERVICE_PRECONDITION: "namenode:50070"
     depends_on:
-      - namenode
+      namenode:
+        condition: service_healthy
     ports:
       - "50080:50075"
     deploy:
@@ -93,7 +100,8 @@ services:
     environment:
       SERVICE_PRECONDITION: "namenode:50070"
     depends_on:
-      - namenode
+      namenode:
+        condition: service_healthy
     ports:
       - "50085:50075"
     deploy:
@@ -113,9 +121,17 @@ services:
     volumes:
       - ./base/postgresql:/var/lib/postgresql/data
     depends_on:
-      - datanode1
-      - datanode2
-      - datanode3
+      datanode1:
+        condition: service_healthy
+      datanode2:
+        condition: service_healthy
+      datanode3:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hive -d metastore"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
     deploy:
       resources:
         limits:
@@ -137,7 +153,21 @@ services:
     ports:
       - "9083:9083"
     depends_on:
-      - hive-metastore-postgresql
+      namenode:
+        condition: service_healthy
+      datanode1:
+        condition: service_healthy
+      datanode2:
+        condition: service_healthy
+      datanode3:
+        condition: service_healthy
+      hive-metastore-postgresql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bash -lc '</dev/tcp/127.0.0.1/9083'"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
     deploy:
       resources:
         limits:
@@ -159,7 +189,13 @@ services:
     ports:
       - "10000:10000"
     depends_on:
-      - hive-metastore
+      hive-metastore:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bash -lc '</dev/tcp/127.0.0.1/10000'"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
     deploy:
       resources:
         limits:
@@ -176,7 +212,8 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - hive-server
+      hive-server:
+        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -197,7 +234,8 @@ services:
     volumes:
       - ./base/hue/hue-overrides.ini:/usr/share/hue/desktop/conf/z-hue.ini
     depends_on:
-      - hue_metadata_database
+      hue_metadata_database:
+        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -216,7 +254,12 @@ services:
     command: mysqld --innodb-flush-method=O_DSYNC --innodb-use-native-aio=OFF --init-file /data/application/init.sql
     volumes:
       - ./base/mysql/data:/var/lib/mysql
-      - ./base/mysql/init.sql:/data/application/init.sql
+      - ./base/mysql/init.sql/mysql-init.sql:/data/application/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
     environment:
       MYSQL_ROOT_USER: root
       MYSQL_ROOT_PASSWORD: secret
@@ -260,7 +303,10 @@ services:
         ipv4_address: 172.27.1.24
 
   flink:
-    image: flink:1.20.3-scala_2.12-java17
+    build:
+      context: ./base/flink
+      dockerfile: Dockerfile
+    image: docker-bigdata-tools/flink-python:1.20.3
     container_name: 04-02-flink
     hostname: flink
     profiles: [notebooks-stream-processing]
@@ -270,6 +316,13 @@ services:
       - "6123:6123"
     environment:
       JOB_MANAGER_RPC_ADDRESS: flink
+      PYFLINK_CLIENT_EXECUTABLE: /usr/bin/python3
+      PYFLINK_PYTHON: /usr/bin/python3
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8081/overview >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
     deploy:
       resources:
         limits:
@@ -277,6 +330,31 @@ services:
     networks:
       net_pet:
         ipv4_address: 172.27.1.25
+
+  flink-taskmanager:
+    build:
+      context: ./base/flink
+      dockerfile: Dockerfile
+    image: docker-bigdata-tools/flink-python:1.20.3
+    container_name: 04-03-flink-taskmanager
+    hostname: flink-taskmanager
+    profiles: [notebooks-stream-processing]
+    command: taskmanager
+    depends_on:
+      flink:
+        condition: service_healthy
+    environment:
+      JOB_MANAGER_RPC_ADDRESS: flink
+      TASK_MANAGER_NUMBER_OF_TASK_SLOTS: 2
+      PYFLINK_CLIENT_EXECUTABLE: /usr/bin/python3
+      PYFLINK_PYTHON: /usr/bin/python3
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.28
 
   # Group 5: HBase
   hbase-master:
@@ -287,11 +365,20 @@ services:
     env_file:
       - ./base/hbase/hbase-standalone.env
     environment:
-      SERVICE_PRECONDITION: "namenode:50070 datanode1:50075 datanode2:50080 datanode3:50085 zookeeper:2181"
+      SERVICE_PRECONDITION: "namenode:50070 datanode1:50075 datanode2:50075 datanode3:50075 zookeeper:2181"
     ports:
       - "16010:16010"
     depends_on:
-      - namenode
+      namenode:
+        condition: service_healthy
+      datanode1:
+        condition: service_healthy
+      datanode2:
+        condition: service_healthy
+      datanode3:
+        condition: service_healthy
+      zookeeper:
+        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -310,10 +397,14 @@ services:
     env_file:
       - ./base/hadoop/hadoop-hive.env
     depends_on:
-      - namenode
-      - datanode1
-      - datanode2
-      - datanode3
+      namenode:
+        condition: service_healthy
+      datanode1:
+        condition: service_healthy
+      datanode2:
+        condition: service_healthy
+      datanode3:
+        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -352,10 +443,16 @@ services:
     volumes:
       - ./base/kafka:/kafka/kafka-logs-kafka
     depends_on:
-      - zookeeper
+      zookeeper:
+        condition: service_healthy
     environment:
       KAFKA_ADVERTISED_HOST_NAME: kafka
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+    healthcheck:
+      test: ["CMD-SHELL", "bash -lc '</dev/tcp/127.0.0.1/9092'"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
     deploy:
       resources:
         limits:
@@ -374,7 +471,8 @@ services:
     ports:
       - "9000:9000"
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
     deploy:
       resources:
         limits:
