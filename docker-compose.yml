@@ -1,9 +1,26 @@
-version: '3' 
+version: '3'
 services:
+
+  # Group 1: core Hadoop storage and coordination
+  zookeeper:
+    image: fjardim/zookeeper
+    container_name: 01-01-zookeeper
+    hostname: zookeeper
+    ports:
+      - "2181:2181"
+    volumes:
+      - ./base/zookeeper:/opt/zookeeper-3.4.6/data
+    deploy:
+      resources:
+        limits:
+          memory: 500m
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.14
 
   namenode:
     image: fjardim/namenode_sqoop
-    container_name: namenode
+    container_name: 01-02-namenode
     hostname: namenode
     volumes:
       - ./base/hdfs/namenode:/hadoop/dfs/name
@@ -23,7 +40,7 @@ services:
 
   datanode1:
     image: fjardim/datanode
-    container_name: datanode1
+    container_name: 01-03-datanode1
     hostname: datanode1
     volumes:
       - ./base/hdfs/datanode1:/hadoop/dfs/data
@@ -45,7 +62,7 @@ services:
 
   datanode2:
     image: fjardim/datanode
-    container_name: datanode2
+    container_name: 01-05-datanode2
     hostname: datanode2
     volumes:
       - ./base/hdfs/datanode2:/hadoop/dfs/data
@@ -67,7 +84,7 @@ services:
 
   datanode3:
     image: fjardim/datanode
-    container_name: datanode3
+    container_name: 01-04-datanode3
     hostname: datanode3
     volumes:
       - ./base/hdfs/datanode3:/hadoop/dfs/data
@@ -86,32 +103,32 @@ services:
     networks:
       net_pet:
         ipv4_address: 172.27.1.8
-  
-  hive-server:
-    image: fjardim/hive
-    container_name: hive-server
-    hostname: hive_server
-    env_file:
-      - ./base/hadoop/hadoop-hive.env
-    environment:
-      HIVE_CORE_CONF_javax_jdo_option_ConnectionURL: "jdbc:postgresql://hive-metastore/metastore"
-      SERVICE_PRECONDITION: "hive-metastore:9083"
-    ports:
-      - "10000:10000"
+
+  # Group 2: Hive query services
+  hive-metastore-postgresql:
+    image: fjardim/hive-metastore
+    container_name: 02-01-hive-metastore-postgresql
+    hostname: hive_metastore_postgresql
+    profiles: [hive-query]
+    volumes:
+      - ./base/postgresql:/var/lib/postgresql/data
     depends_on:
-      - hive-metastore
+      - datanode1
+      - datanode2
+      - datanode3
     deploy:
       resources:
         limits:
           memory: 500m
     networks:
       net_pet:
-        ipv4_address: 172.27.1.9
-  
+        ipv4_address: 172.27.1.11
+
   hive-metastore:
     image: fjardim/hive
-    container_name: hive_metastore
+    container_name: 02-02-hive_metastore
     hostname: hive_metastore
+    profiles: [hive-query]
     env_file:
       - ./base/hadoop/hadoop-hive.env
     command: /opt/hive/bin/hive --service metastore
@@ -128,14 +145,172 @@ services:
     networks:
       net_pet:
         ipv4_address: 172.27.1.10
-  
-  hive-metastore-postgresql:
-    image: fjardim/hive-metastore
-    container_name: hive-metastore-postgresql
-    hostname: hive_metastore_postgresql
-    volumes:
-      - ./base/postgresql:/var/lib/postgresql/data
+
+  hive-server:
+    image: fjardim/hive
+    container_name: 02-03-hive-server
+    hostname: hive_server
+    profiles: [hive-query]
+    env_file:
+      - ./base/hadoop/hadoop-hive.env
+    environment:
+      HIVE_CORE_CONF_javax_jdo_option_ConnectionURL: "jdbc:postgresql://hive-metastore/metastore"
+      SERVICE_PRECONDITION: "hive-metastore:9083"
+    ports:
+      - "10000:10000"
     depends_on:
+      - hive-metastore
+    deploy:
+      resources:
+        limits:
+          memory: 500m
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.9
+
+  presto:
+    image: fjardim/prestodb
+    container_name: 02-04-presto
+    hostname: presto
+    profiles: [hive-query]
+    ports:
+      - "8080:8080"
+    depends_on:
+      - hive-server
+    deploy:
+      resources:
+        limits:
+          memory: 500m
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.16
+
+  # Group 3: Hue and its application database
+  hue:
+    image: fjardim/hue
+    container_name: 03-01-hue
+    hostname: hue
+    profiles: [hue]
+    dns: 8.8.8.8
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./base/hue/hue-overrides.ini:/usr/share/hue/desktop/conf/z-hue.ini
+    depends_on:
+      - hue_metadata_database
+    deploy:
+      resources:
+        limits:
+          memory: 500m
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.12
+
+  hue_metadata_database:
+    image: fjardim/mysql
+    container_name: 03-02-hue_metadata_database
+    hostname: hue_metadata_database
+    profiles: [hue]
+    ports:
+      - "33061:3306"
+    command: mysqld --innodb-flush-method=O_DSYNC --innodb-use-native-aio=OFF --init-file /data/application/init.sql
+    volumes:
+      - ./base/mysql/data:/var/lib/mysql
+      - ./base/mysql/init.sql:/data/application/init.sql
+    environment:
+      MYSQL_ROOT_USER: root
+      MYSQL_ROOT_PASSWORD: secret
+      MYSQL_DATABASE: hue
+      MYSQL_USER: root
+      MYSQL_PASSWORD: secret
+    deploy:
+      resources:
+        limits:
+          memory: 500m
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.13
+
+  # Group 4: notebooks and stream processing
+  jupyter-spark:
+    image: fjardim/jupyter-spark
+    hostname: jupyter-spark
+    container_name: 04-01-jupyter-spark
+    profiles: [notebooks-stream-processing]
+    command: notebook
+    env_file:
+      - ./base/jupyter/jupyter.env
+    ports:
+      - "8889:8889"
+      - "4040:4040"
+      - "4041:4041"
+      - "4042:4042"
+      - "4043:4043"
+    volumes:
+      - ./base/notebooks:/mnt/notebooks/
+    environment:
+      SPARK_MASTER: local[*]
+      JUPYTER_PORT: 8889
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.24
+
+  flink:
+    image: flink:1.20.3-scala_2.12-java17
+    container_name: 04-02-flink
+    hostname: flink
+    profiles: [notebooks-stream-processing]
+    command: jobmanager
+    ports:
+      - "8082:8081"
+      - "6123:6123"
+    environment:
+      JOB_MANAGER_RPC_ADDRESS: flink
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.25
+
+  # Group 5: HBase
+  hbase-master:
+    image: fjardim/hbase-master
+    container_name: 05-01-hbase-master
+    hostname: hbase-master
+    profiles: [hbase]
+    env_file:
+      - ./base/hbase/hbase-standalone.env
+    environment:
+      SERVICE_PRECONDITION: "namenode:50070 datanode1:50075 datanode2:50080 datanode3:50085 zookeeper:2181"
+    ports:
+      - "16010:16010"
+    depends_on:
+      - namenode
+    deploy:
+      resources:
+        limits:
+          memory: 500m
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.17
+
+  # Group 6: ingestion tools
+  sqoop:
+    image: fjardim/namenode_sqoop
+    container_name: 06-01-sqoop
+    hostname: sqoop
+    profiles: [data-ingestion]
+    command: ["tail", "-f", "/dev/null"]
+    env_file:
+      - ./base/hadoop/hadoop-hive.env
+    depends_on:
+      - namenode
       - datanode1
       - datanode2
       - datanode3
@@ -145,71 +320,33 @@ services:
           memory: 500m
     networks:
       net_pet:
-        ipv4_address: 172.27.1.11
+        ipv4_address: 172.27.1.26
 
-  hue:
-    image: fjardim/hue
-    hostname: hue
-    container_name: hue
-    dns: 8.8.8.8
-    ports:
-    - "8888:8888"
-    volumes:
-      - ./base/hue/hue-overrides.ini:/usr/share/hue/desktop/conf/z-hue.ini
-    depends_on:
-      - "database"
-    deploy:
-      resources:
-        limits:
-          memory: 500m
-    networks:
-      net_pet:
-        ipv4_address: 172.27.1.12
-  
-  database:
-    image: fjardim/mysql
-    container_name: database
-    hostname: database
-    ports:
-        - "33061:3306"
-    deploy:
-      resources:
-        limits:
-          memory: 500m
-    command: mysqld --innodb-flush-method=O_DSYNC --innodb-use-native-aio=OFF --init-file /data/application/init.sql
-    volumes:
-        - ./base/mysql/data:/var/lib/mysql
-        - ./base/mysql/init.sql:/data/application/init.sql
+  flume:
+    image: probablyfine/flume:latest
+    container_name: 06-02-flume
+    hostname: flume
+    profiles: [data-ingestion]
     environment:
-        MYSQL_ROOT_USER: root
-        MYSQL_ROOT_PASSWORD: secret
-        MYSQL_DATABASE: hue
-        MYSQL_USER: root
-        MYSQL_PASSWORD: secret
-    networks:
-      net_pet:
-        ipv4_address: 172.27.1.13
-
-  zookeeper:
-    image: fjardim/zookeeper
-    container_name: zookeeper
-    hostname: zookeeper
-    ports:
-      - "2181:2181"
+      FLUME_AGENT_NAME: docker
     volumes:
-      - ./base/zookeeper:/opt/zookeeper-3.4.6/data
+      - ./base/flume/flume.conf:/opt/flume-config/flume.conf:ro
+    ports:
+      - "44444:44444"
     deploy:
       resources:
         limits:
           memory: 500m
     networks:
       net_pet:
-        ipv4_address: 172.27.1.14
+        ipv4_address: 172.27.1.27
 
+  # Group 7: Kafka and its management UI
   kafka:
     image: fjardim/kafka
-    container_name: kafka
+    container_name: 07-01-kafka
     hostname: kafka
+    profiles: [kafka-monitoring]
     ports:
       - "9092:9092"
     volumes:
@@ -227,89 +364,15 @@ services:
       net_pet:
         ipv4_address: 172.27.1.15
 
-  presto-coordinator:
-    image: fjardim/prestodb
-    container_name: presto
-    hostname: presto
-    ports:
-      - "8080:8080"
-    depends_on:
-      - hive-server  
-    deploy:
-      resources:
-        limits:
-          memory: 500m
-    networks:
-      net_pet:
-        ipv4_address: 172.27.1.16
-
-  hbase-master:
-    image: fjardim/hbase-master
-    container_name: hbase-master
-    hostname: hbase-master
-    env_file:
-      - ./base/hbase/hbase-standalone.env
-    environment:
-      SERVICE_PRECONDITION: "namenode:50070 datanode1:50075 datanode2:50080 datanode3:50085 zookeeper:2181"
-    ports:
-      - 16010:16010
-    depends_on:
-      - namenode
-    deploy:
-      resources:
-        limits:
-          memory: 500m
-    networks:
-      net_pet:
-        ipv4_address: 172.27.1.17
-  
-  mongo:
-    image: fjardim/mongo
-    container_name: mongo
-    hostname: mongo
-    restart: always
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: root
-    ports:
-      - 27017:27017
-    volumes:
-      - ./base/mongo:/data
-    deploy:
-      resources:
-        limits:
-          memory: 500m
-    networks:
-      net_pet:
-        ipv4_address: 172.27.1.18
- 
-  mongo-express:
-    image: fjardim/mongo-express
-    container_name: mongo_express
-    hostname: mongo_express
-    restart: always
-    ports:
-      - 8081:8081
-    environment:
-      ME_CONFIG_MONGODB_ADMINUSERNAME: root
-      ME_CONFIG_MONGODB_ADMINPASSWORD: root
-      ME_CONFIG_MONGODB_SERVER: mongo
-    deploy:
-      resources:
-        limits:
-          memory: 200m
-    networks:
-      net_pet:
-        ipv4_address: 172.27.1.19
- 
   kafkamanager:
     image: fjardim/kafkamanager
-    container_name: kafkamanager
+    container_name: 07-02-kafkamanager
     hostname: kafkamanager
-    environment: 
+    profiles: [kafka-monitoring]
+    environment:
       ZK_HOSTS: zookeeper:2181
     ports:
-      - 9000:9000
+      - "9000:9000"
     depends_on:
       - kafka
     deploy:
@@ -319,72 +382,27 @@ services:
     networks:
       net_pet:
         ipv4_address: 172.27.1.20
- 
+
+  # Group 8: dashboards and analytics
   metabase:
-    image: fjardim/metabase
-    container_name: metabase
+    image: metabase/metabase:latest
+    container_name: 08-01-metabase
     hostname: metabase
+    profiles: [analytics]
     volumes:
       - ./base/metabase/data:/metabase-data
     environment:
       MB_DB_FILE: "/metabase-data/metabase.db"
+      JAVA_OPTS: "-Xmx768m"
     ports:
-      - 3000:3000
-    deploy:
-      resources:
-        limits:
-          memory: 500m
-    networks:
-      net_pet:
-        ipv4_address: 172.27.1.21
-
-  streamsets:
-    image: streamsets/datacollector:3.13.0-latest
-    ports:
-      - "18630:18630"
-    networks:
-      net_pet:
-        ipv4_address: 172.27.1.22
-  
-  storm:
-    image: fmantuano/apache-storm:develop
-    container_name: storm
-    ports:
-          - "8090:8080"
-          - "8000:8000"
-    deploy:
-      resources:
-        limits:
-          memory: 4g
-    networks:
-      net_pet:
-        ipv4_address: 172.27.1.23
- 
-  jupyter-spark:
-    image: fjardim/jupyter-spark
-    hostname: jupyter-spark
-    container_name: jupyter-spark
-    command: notebook
-    env_file:
-      - ./base/jupyter/jupyter.env
-    ports:
-      - 8889:8889
-      - 4040:4040
-      - 4041:4041
-      - 4042:4042
-      - 4043:4043
-    volumes:
-       - ./base/notebooks:/mnt/notebooks/
-    environment:
-       SPARK_MASTER: local[*]
-       JUPYTER_PORT: 8889
+      - "3000:3000"
     deploy:
       resources:
         limits:
           memory: 1g
     networks:
       net_pet:
-        ipv4_address: 172.27.1.24
+        ipv4_address: 172.27.1.21
 
 networks:
   net_pet:

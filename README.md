@@ -2,7 +2,7 @@
 :information_source: **This docker-compose file is configured to run multiple nodes.**
 
 
-This is a Hadoop Cluster that contains the necessary tools that can be used in the BigData domain, It's a collection of docker containers that you can use directly to have the maximum of tools like :
+This is a Hadoop Cluster that contains the necessary tools that can be used in the BigData domain. The Compose stack is organized into profiles so the core Hadoop storage group starts by default and the other groups can be started only when needed.
 
 
 * **Hive** 
@@ -11,43 +11,80 @@ This is a Hadoop Cluster that contains the necessary tools that can be used in t
 * **Zookeeper**
 * **Kafka**
 * **Hbase**
-* **Mongo**
 * **Metabase**
-* **Streamsets**
 * **Sqoop**
-* **Storm**
+* **Flume**
+* **Flink**
+* **Jupyter Spark**
 
-
-
-## Docker Images Used 
+## Docker Images Used
 - **namenode** : [fjardim/namenode_sqoop ](https://hub.docker.com/r/fjardim/namenode_sqoop)
 - **datanode** : [fjardim/datanode ](https://hub.docker.com/r/fjardim/datanode)
 - **hive-server** : [fjardim/hive](https://hub.docker.com/r/fjardim/hive)
 - **hive-metastore** : [fjardim/hive](https://hub.docker.com/r/fjardim/hive)
 - **hive-metastore-postgresql** : [fjardim/hive-metastore](https://hub.docker.com/r/fjardim/hive-metastore)
 - **hue** : [fjardim/hue](https://hub.docker.com/r/fjardim/hue)
-- **mysql** : [fjardim/mysql](https://hub.docker.com/r/fjardim/mysql/)
+- **hue_metadata_database** : [fjardim/mysql](https://hub.docker.com/r/fjardim/mysql/)
 - **zookeeper** : [fjardim/zookeeper](https://hub.docker.com/r/fjardim/zookeeper)
 - **kafka** : [fjardim/kafka](https://hub.docker.com/r/fjardim/kafka)
 - **presto-coordinator** : [fjardim/prestodb](https://hub.docker.com/r/fjardim/prestodb)
 - **hbase-master** : [fjardim/hbase-master](https://hub.docker.com/r/fjardim/hbase-master)
-- **mongo** : [fjardim/mongo](https://hub.docker.com/r/fjardim/mongo)
-- **mongo-express** : [fjardim/mongo-express](https://hub.docker.com/r/fjardim/mongo-express)
 - **kafkamanager** : [fjardim/kafkamanager](https://hub.docker.com/r/fjardim/kafkamanager)
-- **metabase** : [fjardim/metabase](https://hub.docker.com/r/fjardim/metabase)
-- **streamsets** : [streamsets/datacollector:3.13.0-latest](https://hub.docker.com/layers/streamsets/datacollector/3.13.0-latest/)
-- **storm** : [fmantuano/apache-storm:develop](https://hub.docker.com/layers/fmantuano/apache-storm/develop/)
+- **metabase** : [metabase/metabase](https://hub.docker.com/r/metabase/metabase)
+- **flink** : [flink:1.20.3-scala_2.12-java17](https://hub.docker.com/_/flink)
+- **sqoop** : [fjardim/namenode_sqoop](https://hub.docker.com/r/fjardim/namenode_sqoop)
+- **flume** : [probablyfine/flume](https://hub.docker.com/r/probablyfine/flume)
 - **jupyter-spark** : [fjardim/jupyter-spark](https://hub.docker.com/r/fjardim/jupyter-spark)
 ---
-## Instalations
+## Installation and startup groups
 ```bash=
 git clone https://gitlab.com/ZakariaMahmoud/docker-bigdata-tools.git
 
 cd docker-bigdata-tools
 
-sudo docker-compose up -d
+docker compose up -d
 ```
-> ⚠️ **It takes some time for launch and configure all the images**
+The default command starts only **Group 1**, which contains ZooKeeper, the NameNode, and the three DataNodes.
+
+To start every group and all services at once:
+
+```bash
+docker compose --profile "*" up -d
+```
+
+Start the other groups when needed:
+
+```bash
+# Group 2: Hive and Presto query services
+docker compose --profile hive-query up -d
+
+# Group 3: Hue and its MySQL metadata database
+docker compose --profile hue up -d
+
+# Group 4: Jupyter Spark and Flink
+docker compose --profile notebooks-stream-processing up -d
+
+# Group 5: HBase
+docker compose --profile hbase up -d
+
+# Group 6: Sqoop and Flume
+docker compose --profile data-ingestion up -d
+
+# Group 7: Kafka and Kafka Manager
+docker compose --profile kafka-monitoring up -d
+
+# Group 8: Metabase
+docker compose --profile analytics up -d
+```
+
+Profiles include Group 1 automatically, so every command keeps the core Hadoop group available. Stop an individual group with its service names, for example:
+
+```bash
+docker compose stop metabase
+docker compose stop kafka kafkamanager
+```
+
+> ⚠️ **It takes some time to launch and configure all the images.**
 
 ## Screenshots
 ### **Namenode**
@@ -137,28 +174,19 @@ SELECT *FROM users;
 ![](https://i.imgur.com/8YdxLxu.png)
 
 
-## Storm UI
-- **URL** : http://localhost:8090/
-
-![](https://i.imgur.com/Uz4kLG1.png)
-![](https://i.imgur.com/qAAa8uo.png)
-
 ## Jupyter
 - **URL** : http://localhost:8889/
 
 ![](https://i.imgur.com/b7zOYtX.png)
 
-## Mongo Express
-- **URL** : http://localhost:8081/
-![](https://i.imgur.com/aHqGu7Q.png)
+## Flink
+- **URL** : http://localhost:8082/
 
-## StreamSets
-- **URL** : http://localhost:18630/
+## Flume
+- **TCP input** : localhost:44444
 
-**Username : admin**
-**Password : admin**
-
-![](https://i.imgur.com/zY9jqhv.png)
+## Metabase
+- **URL** : http://localhost:3000/
 ---
 ## Created by
 
