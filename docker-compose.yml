@@ -306,7 +306,6 @@ services:
     build:
       context: ./base/flink
       dockerfile: Dockerfile
-    image: docker-bigdata-tools/flink-python:1.20.3
     container_name: 04-02-flink
     hostname: flink
     profiles: [notebooks-stream-processing]
@@ -335,7 +334,6 @@ services:
     build:
       context: ./base/flink
       dockerfile: Dockerfile
-    image: docker-bigdata-tools/flink-python:1.20.3
     container_name: 04-03-flink-taskmanager
     hostname: flink-taskmanager
     profiles: [notebooks-stream-processing]
