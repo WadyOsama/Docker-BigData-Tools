@@ -387,10 +387,12 @@ services:
 
   # Group 6: ingestion tools
   sqoop:
-    image: fjardim/namenode_sqoop
+    build:
+      context: ./base/sqoop
     container_name: 06-01-sqoop
     hostname: sqoop
     profiles: [data-ingestion]
+    working_dir: /opt/sqoop-work
     command: ["tail", "-f", "/dev/null"]
     healthcheck:
       disable: true
