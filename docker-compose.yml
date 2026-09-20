@@ -416,16 +416,22 @@ services:
         ipv4_address: 172.27.1.26
 
   flume:
-    image: probablyfine/flume:latest
+    image: ksk124/flume:latest
     container_name: 06-02-flume
     hostname: flume
     profiles: [data-ingestion]
+    command: flume
     environment:
       FLUME_AGENT_NAME: docker
+      FLUME_CONF_FILE: /etc/flume-ng/conf.empty/flume.conf
+      BIGTOP_DEFAULTS_DIR: /tmp/flume-defaults
     volumes:
-      - ./base/flume/flume.conf:/opt/flume-config/flume.conf:ro
+      - ./base/flume/flume.conf:/etc/flume-ng/conf.empty/flume.conf:ro
+      - ./base/flume/lab_data:/var/log/flume_lab
+      - flume-state:/var/log/flume-ng
     ports:
       - "44444:44444"
+      - "8080:8080"
     deploy:
       resources:
         limits:
@@ -510,3 +516,6 @@ networks:
       driver: default
       config:
         - subnet: 172.27.0.0/16
+
+volumes:
+  flume-state:

@@ -44,3 +44,6 @@ __pycache__/
 !.env.example
 .idea/
 .vscode/
+base/flume/lab_data/*
+base/flink/lab.py
+base/flink/stream_simulator.py
