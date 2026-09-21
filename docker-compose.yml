@@ -262,7 +262,7 @@ services:
       - ./base/mysql/data:/var/lib/mysql
       - ./base/mysql/init.sql/mysql-init.sql:/data/application/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot --silent"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -psecret --silent"]
       interval: 5s
       timeout: 5s
       retries: 12
