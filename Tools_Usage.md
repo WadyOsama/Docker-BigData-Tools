@@ -79,7 +79,7 @@ docker compose --profile hive-query up -d
 | Hive Metastore PostgreSQL | Internal: `hive-metastore-postgresql:5432` | Stores Hive metadata. It is not published to the host. |
 | Hive Metastore | `localhost:9083` | Hive clients inside the network use `thrift://hive-metastore:9083`. |
 | Hive Server | `localhost:10000` | Use Beeline or a HiveServer2 client. Example: `beeline -u 'jdbc:hive2://hive-server:10000/default'`. |
-| Presto | [http://localhost:8080](http://localhost:8080) | Open the coordinator UI. From a container use `presto --server presto:8080 --catalog hive --schema default`. |
+| Presto | [http://localhost:18080](http://localhost:18080) | Open the coordinator UI. From a container use `presto --server presto:8080 --catalog hive --schema default`. |
 
 Example Hive commands:
 

@@ -1,4 +1,3 @@
-version: '3'
 services:
 
   # Group 1: core Hadoop storage and coordination
@@ -210,17 +209,24 @@ services:
     hostname: presto
     profiles: [hive-query]
     ports:
-      - "8080:8080"
+      - "18080:8080"
     depends_on:
       hive-server:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bash -lc '</dev/tcp/127.0.0.1/8080'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     deploy:
       resources:
         limits:
-          memory: 500m
+          memory: 1g
     networks:
       net_pet:
         ipv4_address: 172.27.1.16
+        aliases:
+          - presto-coordinator
 
   # Group 3: Hue and its application database
   hue:
@@ -484,7 +490,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 200m
+          memory: 768m
     networks:
       net_pet:
         ipv4_address: 172.27.1.20
@@ -499,13 +505,13 @@ services:
       - ./base/metabase/data:/metabase-data
     environment:
       MB_DB_FILE: "/metabase-data/metabase.db"
-      JAVA_OPTS: "-Xmx768m"
+      JAVA_OPTS: "-Xmx1536m"
     ports:
       - "3000:3000"
     deploy:
       resources:
         limits:
-          memory: 1g
+          memory: 2g
     networks:
       net_pet:
         ipv4_address: 172.27.1.21
