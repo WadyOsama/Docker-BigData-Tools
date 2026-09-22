@@ -198,7 +198,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 500m
+          memory: 900m
     networks:
       net_pet:
         ipv4_address: 172.27.1.9
@@ -300,10 +300,12 @@ services:
     environment:
       SPARK_MASTER: local[*]
       JUPYTER_PORT: 8889
+      PYSPARK_PYTHON: /opt/anaconda3/bin/python3
+      PYSPARK_DRIVER_PYTHON: /opt/anaconda3/bin/python3
     deploy:
       resources:
         limits:
-          memory: 1g
+          memory: 3g
     networks:
       net_pet:
         ipv4_address: 172.27.1.24

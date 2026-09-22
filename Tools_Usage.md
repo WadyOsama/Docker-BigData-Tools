@@ -338,8 +338,8 @@ Kafka accepts host connections at `localhost:9092`; clients inside Compose shoul
 Example commands, if the image contains the standard Kafka scripts:
 
 ```bash
-docker compose exec kafka kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic demo --partitions 1 --replication-factor 1
-docker compose exec kafka kafka-console-producer.sh --bootstrap-server kafka:9092 --topic demo
+docker compose exec kafka kafka-topics.sh --bootstrap-server kafka:9092 --create --topic demo --partitions 1 --replication-factor 1
+docker compose exec kafka kafka-console-producer.sh --broker-list kafka:9092 --topic demo
 docker compose exec kafka kafka-console-consumer.sh --bootstrap-server kafka:9092 --topic demo --from-beginning
 ```
 
