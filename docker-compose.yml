@@ -198,7 +198,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 900m
+          memory: 2g
     networks:
       net_pet:
         ipv4_address: 172.27.1.9
@@ -282,7 +282,9 @@ services:
 
   # Group 4: notebooks and stream processing
   jupyter-spark:
-    image: fjardim/jupyter-spark
+    build:
+      context: ./base/jupyter
+      dockerfile: Dockerfile
     hostname: jupyter-spark
     container_name: 04-01-jupyter-spark
     profiles: [notebooks-stream-processing]
